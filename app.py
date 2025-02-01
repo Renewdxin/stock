@@ -6,8 +6,10 @@ from openpyxl.utils.exceptions import InvalidFileException
 from urllib.parse import quote
 import os
 import time
-from flask import Flask, send_from_directory, jsonify, render_template_string, redirect, url_for
-
+import requests
+from flask import Flask, send_from_directory, jsonify, render_template_string
+from apscheduler.schedulers.background import BackgroundScheduler
+import pytz
 app = Flask(__name__)
 
 request_url = "https://query1.finance.yahoo.com/v8/finance/chart/"
@@ -352,5 +354,28 @@ def download_file():
     except Exception as e:
         return jsonify({"status": "error", "message": f"下载文件时发生错误: {e}"}), 500
 
+# def ping_update():
+#     update_url = "http://127.0.0.1:5000/update"  # 替换为你的实际域名/IP和安全令牌
+#     try:
+#         response = requests.get(update_url)
+#         if response.status_code == 200:
+#             print("自动更新成功")
+#         else:
+#             print(f"自动更新失败，状态码: {response.status_code}")
+#     except Exception as e:
+#         print(f"自动更新时发生错误: {e}")
+
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000)
+    # 设置上海时区
+    shanghai = pytz.timezone('Asia/Shanghai')
+       
+    scheduler = BackgroundScheduler(timezone=shanghai)
+    # 新增的定时任务
+    scheduler.add_job(update, 'cron', hour=16, minute=0)  # 每天16:00执行
+       
+    scheduler.start()
+       
+    try:
+        app.run(host='0.0.0.0', port=5000)
+    except (KeyboardInterrupt, SystemExit):
+        scheduler.shutdown()
