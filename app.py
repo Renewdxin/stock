@@ -1,5 +1,4 @@
 import requests
-import json
 from openpyxl import load_workbook, Workbook
 from openpyxl.styles import Alignment
 from datetime import date
@@ -9,16 +8,15 @@ import os
 import time
 
 request_url = "https://query1.finance.yahoo.com/v8/finance/chart/"
-# request_stock_code = [
-#     "^HSI", "0241.HK", "0700.HK", "^IXIC", "9988.HK", "1810.HK", "2318.HK",
-#     "601318.SS", "002602.SZ", "600276.SS", "000001.SZ", "601127.SS",
-#     "002594.SZ", "300750.SZ", "002230.SZ", "600436.SS", "000850.SZ",
-#     "601111.SS", "000001.SS", "399001.SZ", "399006.SZ", "159766.SZ",
-#     "159875.SZ", "588050.SS", "159928.SZ", "512670.SS", "159901.SZ", "159934.SZ", 
-#     "560080.SS", "161725.SZ", "516110.SS", "512480.SS", "513130.SS", "513100.SS"
-# ]
 request_stock_code = [
-    "^HSI", "0241.HK", "0700.HK"]
+    "^HSI", "0241.HK", "0700.HK", "^IXIC", "9988.HK", "1810.HK", "2318.HK",
+    "601318.SS", "002602.SZ", "600276.SS", "000001.SZ", "601127.SS",
+    "002594.SZ", "300750.SZ", "002230.SZ", "600436.SS", "000850.SZ",
+    "601111.SS", "000001.SS", "399001.SZ", "399006.SZ", "159766.SZ",
+    "159875.SZ", "588050.SS", "159928.SZ", "512670.SS", "159901.SZ", "159934.SZ", 
+    "560080.SS", "161725.SZ", "516110.SS", "512480.SS", "513130.SS", "513100.SS"
+]
+# request_stock_code = ["^HSI", "0241.HK", "0700.HK"]
 
 headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ' \
