@@ -1,23 +1,24 @@
-import openpyxl
+import requests
+import json
+from openpyxl import load_workbook, Workbook
 from openpyxl.styles import Alignment
 from datetime import date
-from openpyxl import load_workbook
-import requests
-import time
 from openpyxl.utils.exceptions import InvalidFileException
 from urllib.parse import quote
+import os
+import time
 
 request_url = "https://query1.finance.yahoo.com/v8/finance/chart/"
-# 使用实际的股票符号，而不是URL编码的符号
-request_stock_code = ["^HSI", "0241.HK", "0700.HK", "^IXIC", "9988.HK", "1810.HK", "2318.HK",
-                     "601318.SS", "002602.SZ", "600276.SS", "000001.SZ", "601127.SS",
-                     "002594.SZ", "300750.SZ", "002230.SZ", "600436.SS", "000850.SZ",
-                     "601111.SS", "000001.SS", "399001.SZ", "399006.SZ", "159766.SZ",
-                     "159875.SZ", "588050.SS", "159928.SZ", "512670.SS", "159901.SZ", "159934.SZ", 
-                     "560080.SS", "161725.SZ", "516110.SS", "512480.SS", "513130.SS", "513100.SS"]
-
-# test
-# request_stock_code = ["^HSI", "0241.HK", "0700.HK"]
+# request_stock_code = [
+#     "^HSI", "0241.HK", "0700.HK", "^IXIC", "9988.HK", "1810.HK", "2318.HK",
+#     "601318.SS", "002602.SZ", "600276.SS", "000001.SZ", "601127.SS",
+#     "002594.SZ", "300750.SZ", "002230.SZ", "600436.SS", "000850.SZ",
+#     "601111.SS", "000001.SS", "399001.SZ", "399006.SZ", "159766.SZ",
+#     "159875.SZ", "588050.SS", "159928.SZ", "512670.SS", "159901.SZ", "159934.SZ", 
+#     "560080.SS", "161725.SZ", "516110.SS", "512480.SS", "513130.SS", "513100.SS"
+# ]
+request_stock_code = [
+    "^HSI", "0241.HK", "0700.HK"]
 
 headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ' \
@@ -32,9 +33,8 @@ config_list = {
     "601111.SS": ["交易数量"],
     "000001.SS": ["交易数量"],
     "399001.SZ": ["交易数量"],
-    "1797.HK": ["备注"],
     "0700.HK": ["备注"],
-    
+    "1797.HK": ["备注"],
 }
 
 def get_stock_data_from_excel(file_path):
@@ -167,7 +167,7 @@ def update_excel(filename, stock_data):
                     stock_col_start[code] = col
             col += 1
     except (FileNotFoundError, InvalidFileException):
-        wb = openpyxl.Workbook()
+        wb = Workbook()
         sheet = wb.active
         # 创建表头
         headers = ["序号", "日期", "星期"]
@@ -268,7 +268,7 @@ def update_excel(filename, stock_data):
     print(f"数据已成功更新到 {filename}")
 
 def main():
-    filename = "test.xlsx"  # 请确保这个文件已经存在，并且有正确的表头
+    filename = os.getenv('STOCK_FILENAME', 'stocks.xlsx')  # 请确保这个文件已经存在，并且有正确的表头
     try:
         stock_data = get_stock_data_today()
         update_excel(filename, stock_data)

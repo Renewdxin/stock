@@ -1,0 +1,46 @@
+# .github/workflows/daily_run.yml
+name: Daily Stock Update
+
+on:
+  schedule:
+    # 每天上海时间17:00运行，相当于UTC时间09:00
+    - cron: '0 9 * * *'
+
+jobs:
+  update_stock:
+    runs-on: ubuntu-latest
+
+    env:
+      # 从GitHub Secrets中获取环境变量
+      STOCK_FILENAME: 'stocks.xlsx'
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+        with:
+          persist-credentials: false  # 确保使用手动设置的 GITHUB_TOKEN
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'  # 根据需要选择Python版本
+
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run Stock Update Script
+        run: |
+          python app.py
+
+      - name: Commit and Push changes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add stocks.xlsx
+          git diff --cached --exit-code || (
+            git commit -m "Automated stock update: $(date +'%Y-%m-%d')"
+            git push
+          )
