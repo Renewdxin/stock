@@ -6,6 +6,9 @@ from openpyxl.utils.exceptions import InvalidFileException
 from urllib.parse import quote
 import os
 import time
+from flask import Flask, send_from_directory, jsonify, render_template_string, redirect, url_for
+
+app = Flask(__name__)
 
 request_url = "https://query1.finance.yahoo.com/v8/finance/chart/"
 request_stock_code = [
@@ -273,5 +276,81 @@ def main():
     except Exception as e:
         print(f"更新股票数据时发生错误: {e}")
 
+
+@app.route('/')
+def home():
+    html = '''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>股票数据管理</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                text-align: center;
+                margin-top: 100px;
+                background-color: #f4f4f4;
+            }
+            .button {
+                display: inline-block;
+                padding: 15px 25px;
+                font-size: 16px;
+                cursor: pointer;
+                text-align: center;
+                text-decoration: none;
+                outline: none;
+                color: #fff;
+                background-color: #4CAF50;
+                border: none;
+                border-radius: 15px;
+                box-shadow: 0 9px #999;
+                margin: 20px;
+            }
+
+            .button:hover {background-color: #45a049}
+
+            .button:active {
+                background-color: #45a049;
+                box-shadow: 0 5px #666;
+                transform: translateY(4px);
+            }
+
+            .button-download {
+                background-color: #008CBA;
+            }
+
+            .button-download:hover {
+                background-color: #007bb5;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>股票数据管理</h1>
+        <a href="{{ url_for('update') }}" class="button">更新当天数据</a>
+        <a href="{{ url_for('download_file') }}" class="button button-download">获取文件</a>
+    </body>
+    </html>
+    '''
+    return render_template_string(html)
+
+@app.route('/update', methods=['GET'])
+def update():
+    filename = os.getenv('STOCK_FILENAME', 'stocks.xlsx')
+    try:
+        stock_data = get_stock_data_today()
+        update_excel(filename, stock_data)
+        return jsonify({"status": "success", "message": f"数据已更新到 {filename}"}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"更新数据时发生错误: {e}"}), 500
+
+@app.route('/download', methods=['GET'])
+def download_file():
+    filename = os.getenv('STOCK_FILENAME', 'stocks.xlsx')
+    directory = os.path.abspath('.')
+    try:
+        return send_from_directory(directory, filename, as_attachment=True)
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"下载文件时发生错误: {e}"}), 500
+
 if __name__ == "__main__":
-    main()
+    app.run(host='0.0.0.0', port=5000)
