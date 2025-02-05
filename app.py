@@ -254,7 +254,7 @@ def update_excel(filename, stock_data):
         # 计算涨幅
         change = ""
         if data.get('previous_close'):
-            change_value = (data['previous_close'] - data['closing_price']) / data['previous_close'] * 100
+            change_value = (data['closing_price'] - data['previous_close']) / data['previous_close'] * 100
             change = f"{change_value:.2f}%"
         sheet.cell(row=last_row, column=change_col, value=change)
         # 写入可选列
