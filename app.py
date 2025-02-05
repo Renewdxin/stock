@@ -123,10 +123,10 @@ def get_stock_data_today():
                 regularMarketDayLow = meta['regularMarketDayLow']
                 previousClose = meta['previousClose']
                 stock_data[stock_code] = {
-                    'closing_price': round(regularMarketPrice, 2),
-                    'low_price': round(regularMarketDayLow, 2),
-                    'high_price': round(regularMarketDayHigh, 2),
-                    'previous_close': round(previousClose, 2)
+                    'closing_price': round(regularMarketPrice, 3),
+                    'low_price': round(regularMarketDayLow, 3),
+                    'high_price': round(regularMarketDayHigh, 3),
+                    'previous_close': round(previousClose, 3)
                 }
                 print(stock_data[stock_code])
             except (KeyError, IndexError):
@@ -255,7 +255,7 @@ def update_excel(filename, stock_data):
         change = ""
         if data.get('previous_close'):
             change_value = (data['closing_price'] - data['previous_close']) / data['previous_close'] * 100
-            change = f"{change_value:.2f}%"
+            change = f"{change_value:.3f}%"
         sheet.cell(row=last_row, column=change_col, value=change)
         # 写入可选列
         optional_cols = config_list.get(code, [])
