@@ -1,17 +1,78 @@
 import requests
 from openpyxl import load_workbook, Workbook
 from openpyxl.styles import Alignment
-from datetime import date
+from datetime import date, timedelta
 from openpyxl.utils.exceptions import InvalidFileException
 from urllib.parse import quote
 import os
 import time
 import requests
-from flask import Flask, send_from_directory, jsonify, render_template_string
+from flask import Flask, send_from_directory, jsonify, render_template_string, session, redirect, url_for, request
 from apscheduler.schedulers.background import BackgroundScheduler
 import pytz
+
 app = Flask(__name__)
 
+# 配置 Flask session 密钥和用户登录密码
+app.secret_key = os.getenv("FLASK_SECRET_KEY", "super_secret_session_key")  # 用于 session 的签名
+app.config["USER_PASSWORD"] = os.getenv("USER_PASSWORD", "secret")  
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=10)  # 登录状态有效期 10 分钟
+
+# 全局拦截器：除登录、静态资源之外，所有请求必须登录
+@app.before_request
+def require_login():
+    if request.endpoint is None:
+        return
+    if request.endpoint in ['login', 'static']:
+        return
+    # 如果 session 中没有登录状态，则重定向到登录页面
+    if not session.get("logged_in"):
+        return redirect(url_for("login"))
+
+# 登录页面：用户输入密钥后提交验证
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    error = ""
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        if password == app.config["USER_PASSWORD"]:
+            session["logged_in"] = True
+            session.permanent = True  # 激活 session 的有效期设置
+            return redirect(url_for("home"))
+        else:
+            error = "密钥错误，请重试！"
+    login_html = '''
+    <!DOCTYPE html>
+    <html lang="zh-CN">
+    <head>
+        <meta charset="utf-8">
+        <title>请输入密钥</title>
+        <style>
+            body {font-family: Arial, sans-serif; text-align: center; margin-top: 100px; background-color: #f4f4f4;}
+            .form-container {display: inline-block; padding: 20px; background-color: #fff; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);}
+        </style>
+    </head>
+    <body>
+        <div class="form-container">
+            <h2>请输入密钥访问网站</h2>
+            <form method="post" action="/login">
+                <input type="password" name="password" placeholder="请输入密钥" required>
+                <button type="submit">提交</button>
+            </form>
+            <p style="color:red;">{{ error }}</p>
+        </div>
+    </body>
+    </html>
+    '''
+    return render_template_string(login_html, error=error)
+
+# 可选：注销登录的接口，让用户退出登录
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
+# 以下内容为原有股票数据更新、文件下载等代码，不变
 request_url = "https://query1.finance.yahoo.com/v8/finance/chart/"
 request_stock_code = [
     "1797.HK", "0241.HK", "0700.HK", "^HSI", "^IXIC", "9988.HK", "1810.HK", "2318.HK",
@@ -66,7 +127,6 @@ def get_stock_data_from_excel(file_path):
 
     return stock_data
 
-
 def get_stock_data_today():
     '''
     需要的参数：regularMarketPrice, regularMarketDayHigh, regularMarketDayLow， regularMarketChangePercent 只要raw格式的数值，regularMarketChangePercent改成百分比格式，保留小数点后两位例如 13.51%
@@ -96,7 +156,7 @@ def get_stock_data_today():
     for code in request_stock_code:
         if not code:
             continue
-        encoded_code = quote(code)  # 对股票代码进行URL编码
+        encoded_code = quote(code)
         url = f"{request_url}{encoded_code}"
         try:
             response = requests.get(url, headers=headers)
@@ -116,7 +176,6 @@ def get_stock_data_today():
             try:
                 result = data['chart']['result'][0]
                 meta = result['meta']
-                # 使用实际的股票代码作为键
                 stock_code = meta.get('symbol', code)
                 regularMarketPrice = meta['regularMarketPrice']
                 regularMarketDayHigh = meta['regularMarketDayHigh']
@@ -140,9 +199,9 @@ def get_stock_data_today():
 
 def update_excel(filename, stock_data):
     '''
-    开头为
+    开头为：
     1. 序号：= 行号 - 1
-    2. 日期：= 今天日期 格式 `2025/01/01`
+    2. 日期：= 今天日期 格式 `YYYY/MM/DD`
     3. 星期：= 今天星期几，如果星期五，则写5
     EXCEL 每个股票一共8列(无需名字，由request_stock_code决定顺序)
     1. 收盘价：表头表示为股票代码，对应 regularMarketPrice
@@ -155,11 +214,9 @@ def update_excel(filename, stock_data):
     8. 涨幅：对应 (previousClose - regularMarketPrice) / previousClose * 100
     9. 备注：无需填写 (可选列)
     '''
-
     try:
         wb = load_workbook(filename)
         sheet = wb.active
-        # 构建股票起始列的映射
         stock_col_start = {}
         header_row = sheet[1]
         col = 1
@@ -173,11 +230,9 @@ def update_excel(filename, stock_data):
     except (FileNotFoundError, InvalidFileException):
         wb = Workbook()
         sheet = wb.active
-        # 创建表头
         headers = ["序号", "日期", "星期"]
         stock_col_start = {}
-        current_col = 4  # 从第4列开始
-
+        current_col = 4
         for idx, code in enumerate(request_stock_code):
             stock_col_start[code] = current_col
             base_columns = [
@@ -190,32 +245,22 @@ def update_excel(filename, stock_data):
                 f"{code} 交易数量",
                 f"{code} 涨幅"
             ]
-            # 如果"交易数量"不在可选列中
             if "交易数量" in config_list.get(code, []):
                 base_columns.remove(f"{code} 交易数量")
             headers.extend(base_columns)
-
-            # 添加可选列，并为可选列添加股票代码前缀，移除"交易数量"
             optional_cols = [col for col in config_list.get(code, []) if col != "交易数量"]
             prefixed_optional_cols = [f"{code} {col}" for col in optional_cols]
             headers.extend(prefixed_optional_cols)
-
             current_col += len(base_columns) + len(prefixed_optional_cols)
-
-            # 在每个股票后添加一个空列，除了最后一个
             if idx != len(request_stock_code) - 1:
                 headers.append("")
                 current_col += 1
-
         sheet.append(headers)
 
     today = date.today()
     weekday_num = today.weekday() + 1
     weekday = 5 if weekday_num == 5 else weekday_num
-
     last_row = sheet.max_row + 1
-
-    # 写入序号、日期、星期
     sheet.cell(row=last_row, column=1, value=last_row - 1)
     sheet.cell(row=last_row, column=2, value=today.strftime("%Y/%m/%d"))
     sheet.cell(row=last_row, column=3, value=weekday)
@@ -227,58 +272,40 @@ def update_excel(filename, stock_data):
         except ValueError:
             print(f"股票代码 {stock_name} 不在 request_stock_code 列表中，跳过。")
             continue
-
         base_col = stock_col_start.get(code)
         if not base_col:
             print(f"无法找到股票 {code} 的起始列，跳过。")
             continue
-
-        # 写入收盘价
         sheet.cell(row=last_row, column=base_col, value=data['closing_price'])
-        # 日k留空
         sheet.cell(row=last_row, column=base_col + 1, value="")
-        # 周k留空
         sheet.cell(row=last_row, column=base_col + 2, value="")
-        # 月k留空
         sheet.cell(row=last_row, column=base_col + 3, value="")
-        # 写入低点
         sheet.cell(row=last_row, column=base_col + 4, value=data['low_price'])
-        # 写入高点
         sheet.cell(row=last_row, column=base_col + 5, value=data['high_price'])
-        # 如果"交易数量"不在配置中，则写入
         if "交易数量" not in config_list.get(code, []):
             change_col = base_col + 7
         else:
-            # 涨幅列偏移
             change_col = base_col + 6
-        # 计算涨幅
         change = ""
         if data.get('previous_close'):
             change_value = (data['closing_price'] - data['previous_close']) / data['previous_close'] * 100
             change = f"{change_value:.3f}%"
         sheet.cell(row=last_row, column=change_col, value=change)
-        # 写入可选列
         optional_cols = config_list.get(code, [])
         for i, col in enumerate(optional_cols):
-            # 可选列在表头中已添加前缀
-            # 在数据字典中仍然使用原始列名
             sheet.cell(row=last_row, column=change_col + 1 + i, value=data.get(col, ''))
-
-    # 调整对齐
     for cell in sheet[last_row]:
         cell.alignment = Alignment(horizontal='center')
-
     wb.save(filename)
     print(f"数据已成功更新到 {filename}")
 
 def main():
-    filename = os.getenv('STOCK_FILENAME', 'stocks.xlsx')  # 请确保这个文件已经存在，并且有正确的表头
+    filename = os.getenv('STOCK_FILENAME', 'stocks.xlsx')
     try:
         stock_data = get_stock_data_today()
         update_excel(filename, stock_data)
     except Exception as e:
         print(f"更新股票数据时发生错误: {e}")
-
 
 @app.route('/')
 def home():
@@ -309,19 +336,15 @@ def home():
                 box-shadow: 0 9px #999;
                 margin: 20px;
             }
-
             .button:hover {background-color: #45a049}
-
             .button:active {
                 background-color: #45a049;
                 box-shadow: 0 5px #666;
                 transform: translateY(4px);
             }
-
             .button-download {
                 background-color: #008CBA;
             }
-
             .button-download:hover {
                 background-color: #007bb5;
             }
@@ -331,6 +354,7 @@ def home():
         <h1>股票数据管理</h1>
         <a href="{{ url_for('update') }}" class="button">更新当天数据</a>
         <a href="{{ url_for('download_file') }}" class="button button-download">获取文件</a>
+        <a href="{{ url_for('logout') }}" class="button" style="background-color: #f44336;">注销</a>
     </body>
     </html>
     '''
@@ -339,6 +363,9 @@ def home():
 @app.route('/update', methods=['GET'])
 def update():
     filename = os.getenv('STOCK_FILENAME', 'stocks.xlsx')
+    # 如果本地文件存在，则先删除
+    if os.path.exists(filename):
+        os.remove(filename)
     try:
         stock_data = get_stock_data_today()
         update_excel(filename, stock_data)
@@ -355,27 +382,12 @@ def download_file():
     except Exception as e:
         return jsonify({"status": "error", "message": f"下载文件时发生错误: {e}"}), 500
 
-# def ping_update():
-#     update_url = "http://127.0.0.1:5000/update"  # 替换为你的实际域名/IP和安全令牌
-#     try:
-#         response = requests.get(update_url)
-#         if response.status_code == 200:
-#             print("自动更新成功")
-#         else:
-#             print(f"自动更新失败，状态码: {response.status_code}")
-#     except Exception as e:
-#         print(f"自动更新时发生错误: {e}")
-
 if __name__ == "__main__":
     # 设置上海时区
     shanghai = pytz.timezone('Asia/Shanghai')
-       
     scheduler = BackgroundScheduler(timezone=shanghai)
-    # 新增的定时任务
-    scheduler.add_job(update, 'cron', hour=16, minute=0)  # 每天16:00执行
-       
+    scheduler.add_job(update, 'cron', hour=16, minute=0)
     scheduler.start()
-       
     try:
         app.run(host='0.0.0.0', port=5000)
     except (KeyboardInterrupt, SystemExit):
