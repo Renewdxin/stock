@@ -13,8 +13,12 @@ from openpyxl.utils.exceptions import InvalidFileException
 import logging
 
 logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO,  # 将日志级别从 DEBUG 改为 INFO
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('app.log'),  # 添加文件日志
+        logging.StreamHandler()  # 保留控制台输出
+    ]
 )
 logger = logging.getLogger(__name__)
 
@@ -397,17 +401,16 @@ def service_unavailable(e):
 
 # 修改主运行代码，添加更多的错误处理和日志
 if __name__ == "__main__":
-    # 设置上海时区
     shanghai = pytz.timezone('Asia/Shanghai')
     scheduler = BackgroundScheduler(timezone=shanghai)
     scheduler.add_job(update, 'cron', hour=0, minute=0)
     
     try:
         scheduler.start()
-        print("应用程序启动中...")
-        # 修改端口为5001或其他未被占用的端口
-        app.run(host='0.0.0.0', port=5001, debug=True)
+        logger.info("应用程序启动中...")
+        # 关闭调试模式，使用生产配置
+        app.run(host='0.0.0.0', port=5000, debug=False)
     except Exception as e:
-        print(f"启动服务器时发生错误: {e}")
+        logger.error(f"启动服务器时发生错误: {e}")
     finally:
         scheduler.shutdown()
