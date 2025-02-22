@@ -25,8 +25,14 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 # 配置 Flask session 密钥和用户登录密码
-app.secret_key = os.getenv("FLASK_SECRET_KEY", "super_secret_session_key")  # 用于 session 的签名
-app.config["USER_PASSWORD"] = os.getenv("USER_PASSWORD", "26221030")
+app.secret_key = os.getenv("FLASK_SECRET_KEY")  # 移除默认值
+if not app.secret_key:
+    raise ValueError("未设置 FLASK_SECRET_KEY 环境变量")
+
+app.config["USER_PASSWORD"] = os.getenv("USER_PASSWORD")  # 移除默认值
+if not app.config["USER_PASSWORD"]:
+    raise ValueError("未设置 USER_PASSWORD 环境变量")
+
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=10)  # 登录状态有效期 10 分钟
 
 # 全局拦截器：除登录、静态资源之外，所有请求必须登录
@@ -93,7 +99,7 @@ request_stock_code = [
     "601111.SS", "000001.SS", "399001.SZ", "399006.SZ", "159766.SZ",
     "159875.SZ", "588050.SS", "159928.SZ", "512670.SS", "159901.SZ", "159934.SZ",
     "560080.SS","601985.SS", "161725.SZ", "516110.SS", "512480.SS", "513130.SS",
-    "002415.SZ","601899.SS","002085.SZ","513100.SS"
+    "002415.SZ","601899.SS","002085.SZ","513100.SS", "688191.SS"
 ]
 # request_stock_code = ["^HSI", "0241.HK", "0700.HK"]
 
