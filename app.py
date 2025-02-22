@@ -1,32 +1,40 @@
-import requests
-from openpyxl import load_workbook, Workbook
-from openpyxl.styles import Alignment
-from datetime import date, timedelta
-from openpyxl.utils.exceptions import InvalidFileException
-from urllib.parse import quote
 import os
 import time
-import requests
-from flask import Flask, send_from_directory, jsonify, render_template_string, session, redirect, url_for, request
-from apscheduler.schedulers.background import BackgroundScheduler
+from datetime import date, timedelta
+from urllib.parse import quote
+
 import pytz
+import requests
+from apscheduler.schedulers.background import BackgroundScheduler
+from flask import Flask, send_from_directory, jsonify, render_template_string, session, redirect, url_for, request
+from openpyxl import load_workbook, Workbook
+from openpyxl.styles import Alignment
+from openpyxl.utils.exceptions import InvalidFileException
+import logging
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
 # 配置 Flask session 密钥和用户登录密码
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "super_secret_session_key")  # 用于 session 的签名
-app.config["USER_PASSWORD"] = os.getenv("USER_PASSWORD", "secret")  
+app.config["USER_PASSWORD"] = os.getenv("USER_PASSWORD", "26221030")
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=10)  # 登录状态有效期 10 分钟
 
 # 全局拦截器：除登录、静态资源之外，所有请求必须登录
 @app.before_request
 def require_login():
+    logger.debug(f"处理请求: {request.endpoint}")
     if request.endpoint is None:
         return
     if request.endpoint in ['login', 'static']:
         return
-    # 如果 session 中没有登录状态，则重定向到登录页面
     if not session.get("logged_in"):
+        logger.info("用户未登录，重定向到登录页面")
         return redirect(url_for("login"))
 
 # 登录页面：用户输入密钥后提交验证
@@ -382,13 +390,24 @@ def download_file():
     except Exception as e:
         return jsonify({"status": "error", "message": f"下载文件时发生错误: {e}"}), 500
 
+# 添加错误处理装饰器
+@app.errorhandler(503)
+def service_unavailable(e):
+    return jsonify(error="服务暂时不可用，请稍后再试"), 503
+
+# 修改主运行代码，添加更多的错误处理和日志
 if __name__ == "__main__":
     # 设置上海时区
     shanghai = pytz.timezone('Asia/Shanghai')
     scheduler = BackgroundScheduler(timezone=shanghai)
-    scheduler.add_job(update, 'cron', hour=16, minute=0)
-    scheduler.start()
+    scheduler.add_job(update, 'cron', hour=0, minute=0)
+    
     try:
-        app.run(host='0.0.0.0', port=5000)
-    except (KeyboardInterrupt, SystemExit):
+        scheduler.start()
+        print("应用程序启动中...")
+        # 修改端口为5001或其他未被占用的端口
+        app.run(host='0.0.0.0', port=5001, debug=True)
+    except Exception as e:
+        print(f"启动服务器时发生错误: {e}")
+    finally:
         scheduler.shutdown()
